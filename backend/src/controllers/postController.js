@@ -46,9 +46,11 @@ const getFeed = async (req, res) => {
 
         const posts = await Post
             .find()
+            .sort({createdAt: -1})
             .skip(skip)
             .limit(limit)
             .populate('author', 'username name avatarUrl')
+            
 
         res.json({ posts, page, limit });
     } catch (error) {
