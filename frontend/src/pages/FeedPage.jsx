@@ -218,7 +218,7 @@ const FeedPage = () => {
                             <img
                                 src={post.imageUrl}
                                 alt={post.caption || "Post image"}
-                                className="w-full max-h-[480px] object-cover"
+                                className="w-full max-h-[480px] object-contain bg-black"
                             />
                         </div>
 
