@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../lib/api.js";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -12,18 +12,41 @@ const FeedPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    // infinite scroll state
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+    // comments state
     const [activePostId, setActivePostId] = useState(null);
     const [comments, setComments] = useState([]);
     const [commentsLoading, setCommentsLoading] = useState(false);
     const [commentError, setCommentError] = useState(null);
     const [newComment, setNewComment] = useState("");
 
-    useEffect(() => {
-        const fetchFeed = async () => {
+    // Load a page of posts (page, limit)
+    const loadMorePosts = useCallback(
+        async () => {
+            // prevent duplicate loads
+            if (!hasMore || isLoadingMore) return;
+
             try {
-                setLoading(true);
-                const res = await api.get("/posts");
-                setPosts(res.data.posts || []);
+                setIsLoadingMore(true);
+
+                const res = await api.get(`/posts?page=${page}&limit=10`);
+                const newPosts = res.data.posts || [];
+
+                // append new posts
+                setPosts((prev) => [...prev, ...newPosts]);
+
+                // if fewer than limit => no more pages
+                if (newPosts.length < 10) {
+                    setHasMore(false);
+                }
+
+                // next page next time
+                setPage((prev) => prev + 1);
+
                 setError(null);
             } catch (err) {
                 console.error("feed error:", err);
@@ -31,12 +54,40 @@ const FeedPage = () => {
                     err.response?.data?.message || "Could not load feed. Please try again.";
                 setError(message);
             } finally {
+                setIsLoadingMore(false);
+            }
+        },
+        [page, hasMore, isLoadingMore]
+    );
+
+    // Initial load
+    useEffect(() => {
+        const loadInitial = async () => {
+            try {
+                setLoading(true);
+                await loadMorePosts();
+            } finally {
                 setLoading(false);
             }
         };
 
-        fetchFeed();
-    }, []);
+        loadInitial();
+    }, [loadMorePosts]);
+
+    // Infinite scroll listener
+    useEffect(() => {
+        const handleScroll = () => {
+            const scrollPosition = window.innerHeight + window.scrollY;
+            const threshold = document.documentElement.offsetHeight - 200;
+
+            if (scrollPosition >= threshold) {
+                loadMorePosts();
+            }
+        };
+
+        window.addEventListener("scroll", handleScroll);
+        return () => window.removeEventListener("scroll", handleScroll);
+    }, [loadMorePosts]);
 
     const requireAuth = () => {
         if (!user) {
@@ -156,7 +207,7 @@ const FeedPage = () => {
         }
     };
 
-    if (loading) {
+    if (loading && !posts.length) {
         return (
             <div className="max-w-2xl mx-auto py-6 px-4">
                 <p className="text-sm text-gray-500">Loading feed...</p>
@@ -164,7 +215,7 @@ const FeedPage = () => {
         );
     }
 
-    if (error) {
+    if (error && !posts.length) {
         return (
             <div className="max-w-2xl mx-auto py-6 px-4">
                 <p className="text-sm text-red-500">{error}</p>
@@ -308,6 +359,18 @@ const FeedPage = () => {
                     </article>
                 );
             })}
+
+            {isLoadingMore && (
+                <p className="text-center text-xs text-gray-500">Loading more...</p>
+            )}
+
+            {!hasMore && posts.length > 0 && (
+                <p className="text-center text-xs text-gray-400">No more posts</p>
+            )}
+
+            {error && posts.length > 0 && (
+                <p className="text-center text-xs text-red-500">{error}</p>
+            )}
         </div>
     );
 };
